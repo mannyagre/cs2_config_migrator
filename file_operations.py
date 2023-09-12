@@ -128,7 +128,7 @@ def modify_lines(lines):
     logging.info("Added 'host_writeconfig' at the end of the file")
 
     # Check if 'echo.txt' exists and if so, append its content at the end of the modified lines
-    echo_txt_path = resource_path('echo.txt')
+    echo_txt_path = resource_path('assets/echo.txt')
     if os.path.exists(echo_txt_path):
         with open(echo_txt_path, 'r') as echo_file:
             echo_content = echo_file.read()

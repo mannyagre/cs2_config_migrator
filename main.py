@@ -1,5 +1,5 @@
 import logging
-from windows_registry import get_cs2_installation_path, get_steam_installation_path
+from installation_paths import get_cs2_installation_path, get_steam_installation_path
 from file_operations import find_config_files, modify_cfg_file
 
 if __name__ == "__main__":
