@@ -1,35 +1,36 @@
-import logging
-import re
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-def get_configurations():
-    """
+function Get-Configurations {
+    <#
+    .SYNOPSIS
     Manual counter-strike configurations that will be used in the "handle's" functions
-    """
-    patterns = [
-            (r'\+moveleft', '+left'),
-            (r'\+moveright', '+right'),
-            (r'\+speed', '+sprint'),
-            (r'sv_noclipspeed "5"', 'sv_noclipspeed "1000"'),
-            (r'KP_INS', 'KP_0'),
-            (r'KP_END', 'KP_1'),
-            (r'KP_DOWNARROW', 'KP_2'),
-            (r'KP_PGDN', 'KP_3'),
-            (r'KP_LEFTARROW', 'KP_4'),
-            (r'KP_RIGHTARROW', 'KP_6'),
-            (r'KP_HOME', 'KP_7'),
-            (r'KP_UPARROW', 'KP_8'),
-            (r'KP_PGUP', 'KP_9'),
-            (r'KP_SLASH', 'KP_DIVIDE')
-        ]
+    #>
+    
+    $patterns = @(
+        @{ Regex = '+moveleft'; Replacement = '+left' },
+        @{ Regex = '+moveright'; Replacement = '+right' },
+        @{ Regex = '+speed'; Replacement = '+sprint' },
+        @{ Regex = 'sv_noclipspeed "5"'; Replacement = 'sv_noclipspeed "1000"' },
+        @{ Regex = 'KP_INS'; Replacement = 'KP_0' },
+        @{ Regex = 'KP_END'; Replacement = 'KP_1' },
+        @{ Regex = 'KP_DOWNARROW'; Replacement = 'KP_2' },
+        @{ Regex = 'KP_PGDN'; Replacement = 'KP_3' },
+        @{ Regex = 'KP_LEFTARROW'; Replacement = 'KP_4' },
+        @{ Regex = 'KP_RIGHTARROW'; Replacement = 'KP_6' },
+        @{ Regex = 'KP_HOME'; Replacement = 'KP_7' },
+        @{ Regex = 'KP_UPARROW'; Replacement = 'KP_8' },
+        @{ Regex = 'KP_PGUP'; Replacement = 'KP_9' },
+        @{ Regex = 'KP_SLASH'; Replacement = 'KP_DIVIDE' }
+    )
 
-    cs2_better_net_configs = {
-            'cl_updaterate': '"128"',
-            'cl_interp_ratio': '"1"',
-            'cl_interp': '"0.015625"'
-        }
+    $cs2BetterNetConfigs = @{
+        cl_updaterate = '128'
+        cl_interp_ratio = '1'
+        cl_interp = '0.015625'
+    }
 
-    deprecated_commands = [
-            "unbindall", "cfgver", "@panorama_debug_overlay_opacity", "ai_report_task_timings_on_limit",
+    $deprecatedCommands = @(
+        "unbindall", "cfgver", "@panorama_debug_overlay_opacity", "ai_report_task_timings_on_limit",
             "ai_think_limit_label", "aim_flickstick_circular_deadzone_max", "aim_flickstick_circular_deadzone_min",
             "aim_flickstick_crank_sensitivity", "aim_flickstick_crank_tightness", "aim_flickstick_enabled",
             "aim_flickstick_flick_snap_mode", "aim_flickstick_flick_tightness", "aim_flickstick_forward_deadzone",
@@ -136,80 +137,91 @@ def get_configurations():
             "vprof_warningmsec", "weapon_accuracy_logging", "xbox_autothrottle", 
             "xbox_throttlebias", "xbox_throttlespoof", "zoom_sensitivity_ratio_joystick", 
             "zoom_sensitivity_ratio_mouse"
-        ]
+    )
 
-    fix_commands = {
-            "cl_crosshairalpha": lambda x: str(int(float(x))),
-            "cl_crosshaircolor_b": lambda x: str(int(float(x))),
-            "cl_crosshaircolor_g": lambda x: str(int(float(x))),
-            "cl_crosshaircolor_r": lambda x: str(int(float(x))),
-            "rate": lambda x: str(int(float(x))),
-            "skill": lambda x: str(int(float(x))),
-            "cl_quickinventory_line_update_speed": lambda x: x.rstrip('f')
+    $fixCommands = @{
+        cl_crosshairalpha = { param($x) [string][int][double]::Parse($x) }
+        cl_crosshaircolor_b = { param($x) [string][int][double]::Parse($x) }
+        cl_crosshaircolor_g = { param($x) [string][int][double]::Parse($x) }
+        cl_crosshaircolor_r = { param($x) [string][int][double]::Parse($x) }
+        rate = { param($x) [string][int][double]::Parse($x) }
+        skill = { param($x) [string][int][double]::Parse($x) }
+        cl_quickinventory_line_update_speed = { param($x) $x.TrimEnd('f') }
+    }
+
+    return $patterns, $cs2BetterNetConfigs, $deprecatedCommands, $fixCommands
+}
+
+function Invoke-DeprecatedCommands {
+    param (
+        [Parameter(Mandatory=$true)]
+        [string]$line,
+        
+        [Parameter(Mandatory=$true)]
+        [System.Collections.Generic.List[string]]$deprecatedCommands
+    )
+
+    $shouldDelete = $false
+
+    foreach ($command in $deprecatedCommands) {
+        if ($line.Trim().StartsWith($command)) {
+            $shouldDelete = $true
+            Write-Host "Found and removed deprecated command '$command' in the line: $($line.Trim())"
+            break
         }
+    }
 
-    return patterns, cs2_better_net_configs, deprecated_commands, fix_commands
+    return $line, $shouldDelete
+}
 
-def handle_deprecated_commands(line, deprecated_commands):
-    """
-    Checks if a line starts with a deprecated command and marks it for deletion if so.
+function Invoke-PatternHandler {
+    param (
+        [string]$line,
+        [System.Collections.Generic.List[System.Tuple[string, string]]]$patterns
+    )
     
-    :param line: The line from the config file being processed.
-    :param deprecated_commands: A list of deprecated commands to check for.
-    :return: The original line and a boolean indicating whether the line should be deleted.
-    """
-    should_delete = False
-    for command in deprecated_commands:
-        if line.strip().startswith(command):
-            should_delete = True
-            logging.info("Found and removed deprecated command '%s' in the line: %s", command, line.strip())
+    foreach ($patternTuple in $patterns) {
+        if ($line -match $patternTuple.Item1) {
+            $line = $line -replace $patternTuple.Item1, $patternTuple.Item2
+            Write-Host "Found and replaced pattern '$($patternTuple.Item1)' with '$($patternTuple.Item2)' in the line: $($line.Trim())"
+        }
+    }
+    
+    return $line
+}
+
+function Invoke-FixCommands {
+    param(
+        [string]$Line,
+        [hashtable]$FixCommands
+    )
+    
+    $FixCommands.GetEnumerator() | ForEach-Object {
+        if ($Line.Trim().StartsWith($_.Key)) {
+            $Value = ($Line.Trim() -split ' ')[1].Trim('"')
+            $Line = "{0} ""{1}""" -f $_.Key, ($_.Value.Invoke($Value))
+            Write-Host "Corrected the command '$_.Key' with the value '$($_.Value.Invoke($Value))' in the line: $($Line.Trim())"
             break
-
-    return line, should_delete
-
-def handle_patterns(line, patterns):
-    """
-    Handles the replacement of patterns in a line based on a list of pattern-replacement pairs.
+        }
+    }
     
-    :param line: The line from the config file being processed.
-    :param patterns: A list of tuples where each tuple contains a pattern to search for and its respective replacement.
-    :return: The modified line with all found patterns replaced; otherwise, the original line.
-    """
-    for pattern, replacement in patterns:
-        if re.search(pattern, line):
-            line = re.sub(pattern, replacement, line)
-            logging.info("Found and replaced pattern '%s' with '%s' in the line: %s", pattern, replacement, line.strip())
+    return $Line
+}
 
-    return line
+function Invoke-NetConfigs {
+    param(
+        [string]$Line,
+        [hashtable]$CS2BetterNetConfigs
+    )
 
-def handle_fix_commands(line, fix_commands):
-    """
-    Handles the correction of certain commands in a line based on a dictionary of command fixer functions.
-    
-    :param line: The line from the config file being processed.
-    :param fix_commands: A dictionary where keys are commands to find and values are functions to correct the command values.
-    :return: The modified line if a fix command was found and processed; otherwise, the original line.
-    """
-    for command, corrector in fix_commands.items():
-        if line.strip().startswith(command):
-            value = line.strip().split(' ')[1].strip('"')
-            line = f'{command} "{corrector(value)}"\n'
-            logging.info("Corrected the command '%s' with the value '%s' in the line: %s", command, corrector(value), line.strip())
-            break
+    $CS2BetterNetConfigs.GetEnumerator() | ForEach-Object {
+        if ($Line.StartsWith($_.Key)) {
+            $Line = "{0} {1}`n" -f $_.Key, $_.Value
+            Write-Host ("Found and replaced '{0}' with '{1}' in the line: {2}" -f $_.Key, $_.Value, $Line.Trim())
+        }
+    }
 
-    return line
+    return $Line
+}
 
-def handle_net_configs(line, cs2_better_net_configs):
-    """
-    This function is responsible for handling network configurations in a line of the configuration file.
-    
-    :param line: A string representing a line in the configuration file.
-    :param cs2_better_net_configs: A dictionary containing network configuration patterns and their respective replacements.
-    :return: The modified line with necessary network configurations replaced; otherwise, the original line.
-    """
-    for pattern, replacement in cs2_better_net_configs.items():
-        if line.startswith(pattern):
-            line = f'{pattern} {replacement}\n'
-            logging.info("Found and replaced '%s' with '%s' in the line: %s", pattern, replacement, line.strip())
-
-    return line
+Export-ModuleMember -Function Invoke-DeprecatedCommands, Invoke-NetConfigs, Invoke-PatternHandler, Invoke-FixCommands, Get-Configurations
