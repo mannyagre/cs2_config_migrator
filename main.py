@@ -23,7 +23,7 @@ if __name__ == "__main__":
                 modify_cfg_file(cfg_file, user_folder, cs2_path)
         else:
             # Error message if no config files were found
-            print("No config.cfg files found")
+            logging.error("No config.cfg files found")
     else:
         # Error message if could't find steam or cs2 installed
-        print("Steam or CS2 not found")
+        logging.error("Steam or CS2 not found")
