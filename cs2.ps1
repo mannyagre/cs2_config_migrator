@@ -1,3 +1,21 @@
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -Name Window -Namespace Console -MemberDefinition '
+[DllImport("Kernel32.dll")]
+public static extern IntPtr GetConsoleWindow();
+
+[DllImport("user32.dll")]
+public static extern bool ShowWindow(IntPtr hWnd, Int32 nCmdShow);
+'
+function Hide-Console {
+    $window = [Console.Window]::GetConsoleWindow()
+    # 0 = Hide
+    [Console.Window]::ShowWindow($window, 0)
+}
+
+Hide-Console
+
+
+
 function Get-Configurations {
     $patterns = @(
         @{ Regex = '\+moveleft'; Replacement = '+left' },
@@ -545,24 +563,96 @@ function Write-ModifiedLines {
     }
 }
 
-$VerbosePreference = "Continue"
+function Get-Nickname {
+    param (
+        [string]$userFolder
+    )
 
-$steam_path_result = Get-SteamInstallationPath
-$cs2_path_result = Get-Cs2InstallationPath
+    $url = "https://steamid.xyz/$userFolder"
 
+    $headers = @{
+        "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
+    }
 
-if ($steam_path_result.Success -and $cs2_path_result.Success) {
-    $CfgFiles, $found = Find-ConfigFiles -SteamPath $steam_path_result.Path
+    $response = Invoke-WebRequest -Uri $url -Headers $headers -Method Get
 
-    if ($found) {
-        foreach ($file_info in $CfgFiles) {
-            $cfgFilePath = $file_info[0]
-            $userFolder = $file_info[1]
-            Invoke-CfgFile -CfgFile $cfgFilePath -UserFolder $userFolder -CS2InstallPath $cs2_path_result.Path
+    if ($response.StatusCode -eq 200) {
+        $divGuide = $response.ParsedHtml.getElementById('guide')
+        if ($divGuide) {
+            $nicknameElements = @($divGuide.getElementsByTagName('input')) | Where-Object { $_.type -eq 'text' }
+            if ($nicknameElements -and $nicknameElements.Count -gt 4) {
+                return $nicknameElements[4].value
+            } else {
+                return "Nickname not found"
+            }
+        } else {
+            return "'guide' div not found"
         }
     } else {
-        Write-Error "No config.cfg files found"
+        return "Error: $($response.StatusCode)"
     }
-} else {
-    Write-Error "Steam or CS2 not found"
 }
+
+# Main function
+function Migra {
+    $VerbosePreference = "Continue"
+
+    $steam_path_result = Get-SteamInstallationPath
+    $cs2_path_result = Get-Cs2InstallationPath
+
+    if ($steam_path_result.Success -and $cs2_path_result.Success) {
+        $CfgFiles, $found = Find-ConfigFiles -SteamPath $steam_path_result.Path
+
+        if ($found) {
+            # Clear the listBox before adding new items
+            $script:listBox.Items.Clear()
+
+            foreach ($file_info in $CfgFiles) {
+                $cfgFilePath = $file_info[0]
+                $userFolder = $file_info[1]
+                $nickname = Get-Nickname -userFolder $userFolder
+                $script:listBox.Items.Add($nickname)
+
+                Invoke-CfgFile -CfgFile $cfgFilePath -UserFolder $userFolder -CS2InstallPath $cs2_path_result.Path
+            }
+        } else {
+            Write-Error "No config.cfg files found"
+        }
+    } else {
+        Write-Error "Steam or CS2 not found"
+    }
+}
+
+# GUI function
+function CS2_Config_Migrator {
+    $form = New-Object Windows.Forms.Form
+    $form.Text = "Interfaz del Usuario"
+    $form.Width = 400
+    $form.Height = 350
+
+    $label = New-Object Windows.Forms.Label
+    $label.Text = "Hola, esta es la interfaz"
+    $label.AutoSize = $true
+    $label.Location = New-Object Drawing.Point 10,10
+
+    $script:listBox = New-Object Windows.Forms.ListBox
+    $script:listBox.Location = New-Object Drawing.Point 10,40
+    $script:listBox.Width = 360
+    $script:listBox.Height = 200
+
+    $button = New-Object Windows.Forms.Button
+    $button.Text = "Comenzar"
+    $button.Location = New-Object Drawing.Point 10, 250
+    $button.Width = 360
+    $button.Add_Click({ Migra })
+
+    $form.Controls.Add($label)
+    $form.Controls.Add($script:listBox)
+    $form.Controls.Add($button)
+
+    $form.ShowDialog()
+}
+
+# Run the GUI
+CS2_Config_Migrator
+
