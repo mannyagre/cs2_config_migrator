@@ -1,4 +1,5 @@
 Add-Type -AssemblyName System.Windows.Forms
+[System.Windows.Forms.Application]::EnableVisualStyles()
 Add-Type -Name Window -Namespace Console -MemberDefinition '
 [DllImport("Kernel32.dll")]
 public static extern IntPtr GetConsoleWindow();
@@ -13,8 +14,6 @@ function Hide-Console {
 }
 
 Hide-Console
-
-
 
 function Get-Configurations {
     $patterns = @(
@@ -542,7 +541,6 @@ function Read-File {
     }
 }
 
-
 function Write-ModifiedLines {
     param (
         [string]$Destination,
@@ -604,14 +602,19 @@ function Migra {
         $CfgFiles, $found = Find-ConfigFiles -SteamPath $steam_path_result.Path
 
         if ($found) {
-            # Clear the listBox before adding new items
-            $script:listBox.Items.Clear()
+            # Clear the textBox before adding new content
+            $script:textBox.Text = "------------------------------------------------------------`r`n`r`n"
 
             foreach ($file_info in $CfgFiles) {
                 $cfgFilePath = $file_info[0]
                 $userFolder = $file_info[1]
                 $nickname = Get-Nickname -userFolder $userFolder
-                $script:listBox.Items.Add($nickname)
+                $user = "User: ${nickname}`r`n"
+                $command = "Command: exec $userFolder`r`n`r`n"
+                $separador = "------------------------------------------------------------`r`n`r`n"
+                $script:textBox.Text += $user
+                $script:textBox.Text += $command
+                $script:textBox.Text += $separador
 
                 Invoke-CfgFile -CfgFile $cfgFilePath -UserFolder $userFolder -CS2InstallPath $cs2_path_result.Path
             }
@@ -625,29 +628,68 @@ function Migra {
 
 # GUI function
 function CS2_Config_Migrator {
+    $formWidth = 700
+    $formHeight = 700
+    $textBoxWidth = 300
+    $textBoxHeight = 200
+    $buttonWidth = 360
+    $buttonHeight = 30
+
     $form = New-Object Windows.Forms.Form
-    $form.Text = "Interfaz del Usuario"
-    $form.Width = 400
-    $form.Height = 350
+    $form.Text = "CS:GO to CS2 Config Migrator by manny_agre"
+    $form.Width = $formWidth
+    $form.Height = $formHeight
+    $form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
+    $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedSingle
+    $form.MaximizeBox = $false
 
     $label = New-Object Windows.Forms.Label
-    $label.Text = "Hola, esta es la interfaz"
+    $label.Text = "
+    After clicking on the START button, open CS2 and type 'exec <config_name>' in the 
+    console to apply the desired config, where <config_name> is the name of the
+    configuration file you wish to use (one for each user who has played CS:GO on this
+    computer).
+    
+    The config file is named after the user's Steam32 ID.
+    
+    Here are the config files found on this computer and you can copy the respective
+    command to apply them in CS2:"
     $label.AutoSize = $true
-    $label.Location = New-Object Drawing.Point 10,10
+    $label.Location = New-Object Drawing.Point(10,10)
+    $label.Font = New-Object System.Drawing.Font('Baskerville', 12)
+    $label.ForeColor = [System.Drawing.Color]::White 
 
-    $script:listBox = New-Object Windows.Forms.ListBox
-    $script:listBox.Location = New-Object Drawing.Point 10,40
-    $script:listBox.Width = 360
-    $script:listBox.Height = 200
+    $script:textBox = New-Object Windows.Forms.TextBox
+    $script:textBox.Width = $textBoxWidth
+    $script:textBox.Height = $textBoxHeight
+    $script:textBox.Multiline = $true
+    $script:textBox.ReadOnly = $true
+    $script:textBox.ScrollBars = [System.Windows.Forms.ScrollBars]::Vertical 
+    $script:textBox.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 45) 
+    $script:textBox.ForeColor = [System.Drawing.Color]::White
+    $script:textBox.TextAlign = [System.Windows.Forms.HorizontalAlignment]::Center
+
+    # Calculate locations
+    $textBoxX = ($formWidth - $textBoxWidth) / 2
+    $textBoxY = ($formHeight - $textBoxHeight) / 2.3
+    $buttonX = ($formWidth - $buttonWidth) / 2
+    $buttonY = $textBoxY + $textBoxHeight + 20
+
+    # Set the locations
+    $script:textBox.Location = New-Object Drawing.Point($textBoxX, $textBoxY)
 
     $button = New-Object Windows.Forms.Button
-    $button.Text = "Comenzar"
-    $button.Location = New-Object Drawing.Point 10, 250
-    $button.Width = 360
+    $button.Text = "START"
+    $button.Width = $buttonWidth
+    $button.Height = $buttonHeight
+    $button.Location = New-Object Drawing.Point($buttonX, $buttonY)
+    $button.Font = New-Object System.Drawing.Font('Baskerville', 11)
+    $button.ForeColor = [System.Drawing.Color]::White 
+    $button.BackColor = [System.Drawing.Color]::FromArgb(60, 60, 60)
     $button.Add_Click({ Migra })
 
     $form.Controls.Add($label)
-    $form.Controls.Add($script:listBox)
+    $form.Controls.Add($script:textBox)
     $form.Controls.Add($button)
 
     $form.ShowDialog()
