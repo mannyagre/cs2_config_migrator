@@ -295,6 +295,7 @@ function Set-Destination {
     try {
         if (-not (Test-Path -Path $Cs2InstallPath)) {
             Write-Warning "The 'Steam32ID' folder does not exist at the path: $Cs2InstallPath" -ForegroundColor Yellow
+            return $null
         }
 
         $NewFileName = "$UserFolder.cfg"
@@ -302,8 +303,21 @@ function Set-Destination {
 
         $Destination = Join-Path $Cs2InstallPath $NewFileName
 
-        Write-Host "Prepared destination path: $Destination"
+        # Check if the .cfg file with the name already exists
+        if (Test-Path $Destination) {
+            $Counter = 1
+            # Find the next available old file name
+            do {
+                $OldName = "${UserFolder}_old$Counter.cfg"
+                $OldDestination = Join-Path $Cs2InstallPath $OldName
+                $Counter++
+            } while (Test-Path $OldDestination)
+            
+            Rename-Item -Path $Destination -NewName $OldName
+            Write-Host "Renamed existing file to: $OldName"
+        }
 
+        Write-Host "Prepared destination path: $Destination"
         return $Destination
     }
     catch {
@@ -311,6 +325,8 @@ function Set-Destination {
         return $null
     }
 }
+
+
 
 function Get-EchoLines {
     return @(
@@ -429,10 +445,10 @@ function Invoke-Lines {
 
             $line = Invoke-FixCommands -Line $line -FixCommands $fixFloats
 
-            # if (-not $shouldDelete) {
-            #     $line = Invoke-NetConfigs -Line $line -CS2BetterNetConfigs $cs2BetterNetConfigs -FoundNetConfigs ([ref]$foundNetConfigs)
-            #     $modifiedLines += $line
-            # }
+            if (-not $shouldDelete) {
+                # $line = Invoke-NetConfigs -Line $line -CS2BetterNetConfigs $cs2BetterNetConfigs -FoundNetConfigs ([ref]$foundNetConfigs)
+                $modifiedLines += $line
+            }
         }
     }
 
