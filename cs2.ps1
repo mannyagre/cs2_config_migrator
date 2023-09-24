@@ -33,11 +33,11 @@ function Get-Configurations {
         @{ Regex = 'KP_SLASH'; Replacement = 'KP_DIVIDE' }
     )
 
-    $cs2BetterNetConfigs = @(
-        @{ Key = 'cl_updaterate'; Value = '128' },
-        @{ Key = 'cl_interp_ratio'; Value = '1' },
-        @{ Key = 'cl_interp'; Value = '0.015625' }
-    )
+    # $cs2BetterNetConfigs = @(
+    #     @{ Key = 'cl_updaterate'; Value = '128' },
+    #     @{ Key = 'cl_interp_ratio'; Value = '1' },
+    #     @{ Key = 'cl_interp'; Value = '0.015625' }
+    # )
 
     $deprecatedCommands = @(
         "unbindall", "cfgver", "@panorama_debug_overlay_opacity", "ai_report_task_timings_on_limit",
@@ -159,7 +159,9 @@ function Get-Configurations {
         cl_quickinventory_line_update_speed = { param($x) $x.TrimEnd('f') }
     }
 
-    return @($patterns, $cs2BetterNetConfigs, $deprecatedCommands, $fixFloats)
+    return @($patterns, $deprecatedCommands, $fixFloats)
+    # return @($patterns, $cs2BetterNetConfigs, $deprecatedCommands, $fixFloats)
+
 }
 
 function Invoke-DeprecatedCommands {
@@ -219,22 +221,22 @@ function Invoke-FixCommands {
     return $Line
 }
 
-function Invoke-NetConfigs {
-    param(
-        [string]$Line,
-        [Array]$CS2BetterNetConfigs,
-        [ref]$FoundNetConfigs
-    )
+# function Invoke-NetConfigs {
+#     param(
+#         [string]$Line,
+#         [Array]$CS2BetterNetConfigs,
+#         [ref]$FoundNetConfigs
+#     )
 
-    $CS2BetterNetConfigs | ForEach-Object {
-        if ($Line.StartsWith($_.Key)) {
-            $Line = "{0} {1}`n" -f $_.Key, $_.Value
-            Write-Host ("Found and replaced '{0}' with the value '{1}' in the line: {2}" -f $_.Key, $_.Value, $Line.Trim())
-            $FoundNetConfigs.Value[$_.Key] = $true
-        }
-    }
-    return $Line
-}
+#     $CS2BetterNetConfigs | ForEach-Object {
+#         if ($Line.StartsWith($_.Key)) {
+#             $Line = "{0} {1}`n" -f $_.Key, $_.Value
+#             Write-Host ("Found and replaced '{0}' with the value '{1}' in the line: {2}" -f $_.Key, $_.Value, $Line.Trim())
+#             $FoundNetConfigs.Value[$_.Key] = $true
+#         }
+#     }
+#     return $Line
+# }
 
 function Find-ConfigFiles {
     param(
@@ -400,19 +402,24 @@ function Invoke-Lines {
         [string[]]$Lines
     )
 
+    # $configurations = Get-Configurations
+    # $patterns = $configurations[0]
+    # $cs2BetterNetConfigs = $configurations[1]
+    # $deprecatedCommands = $configurations[2]
+    # $fixFloats = $configurations[3]
+
     $configurations = Get-Configurations
     $patterns = $configurations[0]
-    $cs2BetterNetConfigs = $configurations[1]
-    $deprecatedCommands = $configurations[2]
-    $fixFloats = $configurations[3]
+    $deprecatedCommands = $configurations[1]
+    $fixFloats = $configurations[2]
 
     $patternsList = New-Object 'System.Collections.Generic.List[System.Tuple[string,string]]'
     $patterns | ForEach-Object { $patternsList.Add([System.Tuple]::Create($_.Regex, $_.Replacement)) }
 
     $modifiedLines = @()
 
-    $foundNetConfigs = @{}
-    $cs2BetterNetConfigs | ForEach-Object { $foundNetConfigs[$_.Key] = $false }
+    # $foundNetConfigs = @{}
+    # $cs2BetterNetConfigs | ForEach-Object { $foundNetConfigs[$_.Key] = $false }
 
     foreach ($line in $Lines) {
         if (-not [string]::IsNullOrWhiteSpace($line)) {
@@ -422,21 +429,21 @@ function Invoke-Lines {
 
             $line = Invoke-FixCommands -Line $line -FixCommands $fixFloats
 
-            if (-not $shouldDelete) {
-                $line = Invoke-NetConfigs -Line $line -CS2BetterNetConfigs $cs2BetterNetConfigs -FoundNetConfigs ([ref]$foundNetConfigs)
-                $modifiedLines += $line
-            }
+            # if (-not $shouldDelete) {
+            #     $line = Invoke-NetConfigs -Line $line -CS2BetterNetConfigs $cs2BetterNetConfigs -FoundNetConfigs ([ref]$foundNetConfigs)
+            #     $modifiedLines += $line
+            # }
         }
     }
 
-    $foundNetConfigs.GetEnumerator() | ForEach-Object {
-        $currentKey = $_.Key
-        if (-not $_.Value) {
-            $configValue = ($cs2BetterNetConfigs | Where-Object { $_.Key -eq $currentKey } | Select-Object -First 1).Value
-            $modifiedLines += ("{0} {1}" -f $currentKey, $configValue)
-            Write-Host ("Added better net configuration '{0}' with value '{1}'" -f $currentKey, $configValue)
-        }
-    }
+    # $foundNetConfigs.GetEnumerator() | ForEach-Object {
+    #     $currentKey = $_.Key
+    #     if (-not $_.Value) {
+    #         $configValue = ($cs2BetterNetConfigs | Where-Object { $_.Key -eq $currentKey } | Select-Object -First 1).Value
+    #         $modifiedLines += ("{0} {1}" -f $currentKey, $configValue)
+    #         Write-Host ("Added better net configuration '{0}' with value '{1}'" -f $currentKey, $configValue)
+    #     }
+    # }
              
     $modifiedLines += "host_writeconfig"
     Write-Host "Added 'host_writeconfig' at the end of the file"
