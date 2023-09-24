@@ -1,11 +1,4 @@
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-
 function Get-Configurations {
-    <#
-    .SYNOPSIS
-    Manual counter-strike configurations that will be used in the "handle's" functions
-    #>
-    
     $patterns = @(
         @{ Regex = '\+moveleft'; Replacement = '+left' },
         @{ Regex = '\+moveright'; Replacement = '+right' },
@@ -239,29 +232,23 @@ function Find-ConfigFiles {
     try {
         $CfgFiles = @()
 
-        # Define the userdata directory using the provided steam_path
         $UserdataDir = Join-Path $SteamPath "userdata"
 
-        # Check if the userdata directory exists
         if (-not (Test-Path $UserdataDir)) {
             Write-Host "The 'userdata' folder does not exist at the path: $UserdataDir" -ForegroundColor Yellow
             return $CfgFiles, ($CfgFiles.Count -gt 0)
         }
 
-        # Find all directories within UserdataDir
         $UserFolders = Get-ChildItem -Path $UserdataDir -Directory | Select-Object -ExpandProperty Name
 
-        # Check if any user folders are found
         if (-not $UserFolders -or $UserFolders.Count -eq 0) {
             Write-Host "No user ID folders found in 'userdata' at the path: $UserdataDir" -ForegroundColor Yellow
             return $CfgFiles, ($CfgFiles.Count -gt 0)
         }
 
-        # Loop through each user folder to find config directories
         foreach ($UserFolder in $UserFolders) {
             $CfgDir = Join-Path $UserdataDir "$UserFolder\730\local\cfg"
 
-            # If a config directory is found, find all config.cfg files in it
             if (Test-Path $CfgDir) {
                 $CfgFilePaths = Get-ChildItem -Path $CfgDir -Recurse -Filter "config.cfg" | Select-Object -ExpandProperty FullName
 
@@ -271,7 +258,6 @@ function Find-ConfigFiles {
             }
         }
 
-        # Return the list of config files and a boolean indicating if any were found
         return $CfgFiles, ($CfgFiles.Count -gt 0)
     }
     catch {
@@ -288,23 +274,17 @@ function Set-Destination {
     )
 
     try {
-        # Check if the Cs2InstallPath directory exists
         if (-not (Test-Path -Path $Cs2InstallPath)) {
             Write-Warning "The 'Steam32ID' folder does not exist at the path: $Cs2InstallPath" -ForegroundColor Yellow
         }
 
-        # Construct the new file name
         $NewFileName = "$UserFolder.cfg"
         Write-Host "Generated new file name: $NewFileName"
 
-        # Determine the destination path using string concatenation
         $Destination = Join-Path $Cs2InstallPath $NewFileName
 
-        # Now, instead of copying the original file, you just return the destination
-        # path where the new, modified content will be written.
         Write-Host "Prepared destination path: $Destination"
 
-        # Return the destination path
         return $Destination
     }
     catch {
@@ -314,16 +294,6 @@ function Set-Destination {
 }
 
 function Get-EchoLines {
-    <#
-    .SYNOPSIS
-    This function returns an ASCII art that will be added at the end of the config.cfg file.
-
-    .DESCRIPTION
-    The Get-EchoLines function returns a list of strings that create an ASCII art to be added at the end of a config.cfg file.
-
-    .OUTPUTS
-    System.String[]
-    #>
     return @(
         'echo "                                             .=-   +#=                                              "',
         'echo "                                            :@@%- :@@@:                                             "',
@@ -409,24 +379,10 @@ function Get-EchoLines {
 }
 
 function Invoke-Lines {
-    <#
-    .SYNOPSIS
-    This function modifies the lines from the configuration file based on various rules defined in 
-    Get-Configurations function. It handles deprecated commands, pattern replacements, fix commands,
-    and network configurations. It also appends 'host_writeconfig' and the content of Get-EchoLines
-    at the end of the modified lines.
-    
-    .PARAMETER Lines
-    A list of strings where each string is a line from the original configuration file.
-
-    .OUTPUTS
-    System.String[]
-    #>
     param(
         [string[]]$Lines
     )
 
-    # Fetching configurations for modifying the lines
     $configurations = Get-Configurations
     $patterns = $configurations[0]
     $cs2BetterNetConfigs = $configurations[1]
@@ -436,26 +392,19 @@ function Invoke-Lines {
     $patternsList = New-Object 'System.Collections.Generic.List[System.Tuple[string,string]]'
     $patterns | ForEach-Object { $patternsList.Add([System.Tuple]::Create($_.Regex, $_.Replacement)) }
 
-    # Initialize an empty list to store the modified lines
     $modifiedLines = @()
 
-    # Inicialización de un hash para marcar qué configuraciones de red se han encontrado
     $foundNetConfigs = @{}
     $cs2BetterNetConfigs | ForEach-Object { $foundNetConfigs[$_.Key] = $false }
 
-    # Loop through each line in the input lines
     foreach ($line in $Lines) {
         if (-not [string]::IsNullOrWhiteSpace($line)) {
-            # Handle deprecated commands and determine if the line should be deleted
             $line, $shouldDelete = Invoke-DeprecatedCommands -Line $line -DeprecatedCommands $deprecatedCommands
 
-            # Handle pattern replacements in the line
             $line = Invoke-PatternHandler -Line $line -Patterns $patternsList
 
-            # Handle fix commands in the line
             $line = Invoke-FixCommands -Line $line -FixCommands $fixFloats
 
-            # If the line should not be deleted, handle network configurations
             if (-not $shouldDelete) {
                 $line = Invoke-NetConfigs -Line $line -CS2BetterNetConfigs $cs2BetterNetConfigs -FoundNetConfigs ([ref]$foundNetConfigs)
                 $modifiedLines += $line
@@ -463,7 +412,6 @@ function Invoke-Lines {
         }
     }
 
-    # Después de procesar todas las líneas, verifica qué configuraciones no se encontraron y agrégalas al final
     $foundNetConfigs.GetEnumerator() | ForEach-Object {
         $currentKey = $_.Key
         if (-not $_.Value) {
@@ -473,11 +421,9 @@ function Invoke-Lines {
         }
     }
              
-    # Add 'host_writeconfig' at the end of the file
     $modifiedLines += "host_writeconfig"
     Write-Host "Added 'host_writeconfig' at the end of the file"
 
-    # Append echo's content at the end of the modified lines (assuming Get-EchoLines is another function you have)
     $echoLinesContent = Get-EchoLines
     foreach ($echoLine in $echoLinesContent) {
         $modifiedLines += $echoLine
@@ -509,34 +455,27 @@ function Invoke-CfgFile {
         
         return $config_modified
     } catch {
-        # Si ocurre una excepción, estableciendo config_modified en False
         $config_modified = $false
         
-        # Logging the error that occurred during the modification
-        Write-Host "Ocurrió un error mientras se modificaba o movía el archivo $CfgFile" -ForegroundColor Red
+        Write-Host "An error in the Invoke-CfgFile Function with the cfgfile:", $CfgFile -ForegroundColor Red
         
-        # Devolviendo False para indicar una modificación no exitosa
         return $config_modified
     }
 }
 
 function Get-SteamInstallationPath {
     try {
-        # Retrieving the Steam installation path from the registry
         $steamPath = Get-ItemPropertyValue -Path 'HKCU:\Software\Valve\Steam' -Name 'SteamPath'
         
-        # If the path is found, return it along with a success flag
         if ($steamPath) {
             return [PSCustomObject]@{
                 Path = $steamPath
                 Success = $true
             }
         } else {
-            # If the path is not found, throw an exception
             throw "Steam installation path not found in the registry."
         }
     } catch {
-        # Logging the error and returning a failure flag
         Write-Error "Could not retrieve the Steam installation path: $_" -ForegroundColor Red
         return [PSCustomObject]@{
             Path = $null
@@ -547,25 +486,20 @@ function Get-SteamInstallationPath {
 
 function Get-CS2InstallationPath {
     try {
-        # Retrieving the CS2 installation path from the registry
         $cs2Path = Get-ItemPropertyValue -Path 'HKCU:\Software\Classes\csgo\Shell\Open\Command' -Name '(default)'
         
-        # If the path is found, extract the executable path and adjust it
         if ($cs2Path) {
             $path = $cs2Path -split '"' | Select-Object -Index 1
             $path = $path -replace '\\game\\bin\\win64\\cs2.exe', '\game\csgo\cfg'
             
-            # Return the modified path along with a success flag
             return [PSCustomObject]@{
                 Path = $path
                 Success = $true
             }
         } else {
-            # If the path is not found, throw an exception
             throw "CS2 installation path not found in the registry."
         }
     } catch {
-        # Logging the error and returning a failure flag
         Write-Error "Could not retrieve the CS2 installation path: $_" -ForegroundColor Red
         return [PSCustomObject]@{
             Path = $null
@@ -578,16 +512,13 @@ function Read-File {
     param (
         [string]$Destination
     )
-
-    
+ 
     try {
-        # Lee las líneas del archivo en la ruta de destino
         $lines = Get-Content -Path $Destination
         Write-Host "Successfully read the file at: $Destination"
         return $lines
     }
     catch {
-        # Loggea cualquier error que ocurra durante la lectura del archivo
         Write-Host "An error occurred while reading the file at $Destination. Error: $_" -ForegroundColor Red
         return $null
     }
@@ -604,37 +535,27 @@ function Write-ModifiedLines {
         foreach ($line in $ModifiedLines) {
             $formattedLine = $line.Trim()
             if ($formattedLine) {
-                # Solo añade la línea al archivo si no está vacía
                 Add-Content -Path $Destination -Value $formattedLine
-            }
-            else {
-                # Si deseas escribir una línea vacía en el archivo, puedes usar esta línea:
-                # Add-Content -Path $Destination -Value ""
             }
         }
         Write-Host "Successfully wrote the modified lines to the file at: $Destination" -ForegroundColor Green
     }
     catch {
-        # Loggea cualquier error que ocurra durante la escritura en el archivo
         Write-Host "An error occurred while writing the modified lines to the file at $Destination" -ForegroundColor Red
     }
 }
 
-# Configuración de logging (PowerShell usa Write-Verbose para debug logging)
 $VerbosePreference = "Continue"
 
-# Obteniendo las rutas de instalación de steam y cs2
 $steam_path_result = Get-SteamInstallationPath
 $cs2_path_result = Get-Cs2InstallationPath
 
 
 if ($steam_path_result.Success -and $cs2_path_result.Success) {
-    # Buscando todos los archivos config.cfg de cs:go
     $CfgFiles, $found = Find-ConfigFiles -SteamPath $steam_path_result.Path
 
     if ($found) {
         foreach ($file_info in $CfgFiles) {
-            # Modifica cada archivo config.cfg encontrado
             $cfgFilePath = $file_info[0]
             $userFolder = $file_info[1]
             Invoke-CfgFile -CfgFile $cfgFilePath -UserFolder $userFolder -CS2InstallPath $cs2_path_result.Path
